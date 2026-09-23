@@ -24,8 +24,8 @@ import { errorHandler, globalLimiter, notFoundHandler } from '@/middlewares';
 import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
 import { randomUUID } from 'node:crypto';
+
 import { env } from '@/config';
-import { errorHandler, notFoundHandler } from '@/middlewares';
 import { apiRouter } from '@/routes';
 import { baseLogger } from '@/utils';
 
