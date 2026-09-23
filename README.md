@@ -87,6 +87,23 @@ Incoming `body` / `params` / `query` are validated against Zod schemas in
 `src/validators/` by the `validate()` middleware. Invalid requests return
 `422` with field-level errors and never reach a controller; controllers read
 parsed data through `getValidated()`.
+
+## Auth
+
+| Endpoint                     | Purpose                                                                                   |
+| ---------------------------- | ----------------------------------------------------------------------------------------- |
+| `POST /api/v1/auth/register` | Create a user + verification record; returns a token pair and a verification token (201). |
+| `POST /api/v1/auth/login`    | Exchange credentials for a token pair (200).                                              |
+| `POST /api/v1/auth/refresh`  | Rotate the presented refresh token (single-use; 200).                                     |
+
+Access tokens are HS256 JWTs signed with `JWT_SECRET`, live for
+`ACCESS_TOKEN_TTL` (default `15m`). Refresh tokens are opaque 32-byte hex
+values whose SHA‑256 hash is stored in `RefreshToken`; they expire after
+`REFRESH_TOKEN_TTL_DAYS` (default `7`) and are revoked on rotation, so replay
+of a used refresh token returns `401`. Login errors stay generic to avoid user
+enumeration. The auth feature is rate-limited to 10 requests/minute through
+the router factory.
+
 ## Header policy
 
 Set in `src/app.ts`, in this order:
