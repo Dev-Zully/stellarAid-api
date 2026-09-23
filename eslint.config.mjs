@@ -1,50 +1,33 @@
-// @ts-check
-import eslint from '@eslint/js';
-import eslintPluginPrettierRecommended from 'eslint-plugin-prettier/recommended';
-import globals from 'globals';
+import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
+import prettierConfig from 'eslint-config-prettier';
 
 export default tseslint.config(
+  { ignores: ['dist/', 'coverage/', '.husky/_/'] },
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+  prettierConfig,
   {
-    ignores: ['eslint.config.mjs'],
-  },
-  eslint.configs.recommended,
-  ...tseslint.configs.recommendedTypeChecked,
-  eslintPluginPrettierRecommended,
-  {
+    // Plain CommonJS scripts, if any are added later, run under Node.
+    files: ['**/*.js', '**/*.cjs'],
     languageOptions: {
       globals: {
-        ...globals.node,
-        ...globals.jest,
-      },
-      sourceType: 'commonjs',
-      parserOptions: {
-        projectService: true,
-        tsconfigRootDir: import.meta.dirname,
+        require: 'readonly',
+        module: 'writable',
+        exports: 'writable',
+        process: 'readonly',
+        __dirname: 'readonly',
+        console: 'readonly',
       },
     },
   },
   {
+    files: ['src/**/*.ts'],
     rules: {
-      '@typescript-eslint/no-explicit-any': 'off',
-      '@typescript-eslint/no-floating-promises': 'warn',
-      '@typescript-eslint/no-unsafe-argument': 'warn',
-      // Enforce the project naming conventions (see docs/naming-conventions.md).
-      '@typescript-eslint/naming-convention': [
-        'warn',
-        { selector: 'default', format: ['camelCase'] },
-        { selector: 'variable', format: ['camelCase', 'UPPER_CASE'] },
-        {
-          selector: 'parameter',
-          format: ['camelCase'],
-          leadingUnderscore: 'allow',
-        },
-        { selector: 'typeLike', format: ['PascalCase'] },
-        { selector: 'enumMember', format: ['UPPER_CASE', 'PascalCase'] },
-        { selector: 'import', format: null },
-        { selector: 'objectLiteralProperty', format: null },
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
       ],
-      "prettier/prettier": ["error", { endOfLine: "auto" }],
     },
   },
 );
