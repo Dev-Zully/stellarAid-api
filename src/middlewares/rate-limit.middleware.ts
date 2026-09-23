@@ -1,9 +1,10 @@
 /**
  * Rate limiting middleware.
  *
- * Protects public endpoints from abuse. A shared in-memory store is used when
- * no Redis is configured; when `REDIS_URL` is set, the store is backed by
- * Redis so limits are enforced consistently across multiple instances.
+ * Protects public endpoints from abuse. Each limiter uses its own in-memory
+ * store when no Redis is configured; when `REDIS_URL` is set, a Redis-backed
+ * store is used so limits are enforced consistently across multiple
+ * instances.
  *
  * Limits:
  * - Global: 100 requests/minute against every route.
@@ -13,6 +14,11 @@
  * Rate-limit headers (`RateLimit-Limit`, `RateLimit-Remaining`,
  * `RateLimit-Reset`) are present on every response, and over-limit requests
  * get `429` with a `Retry-After` header.
+ *
+ * Store: each limiter owns its own MemoryStore instance (express-rate-limit
+ * forbids sharing one store across limiters). When `REDIS_URL` is set, a
+ * single Redis-backed store is used so limits are consistent across
+ * instances.
  */
 
 import { Redis } from 'ioredis';
@@ -25,8 +31,6 @@ import rateLimit, {
 import { RedisStore, type RedisReply } from 'rate-limit-redis';
 import { env } from '@/config';
 import { logger } from '@/utils';
-
-const SHARED_MEMORY_STORE = new MemoryStore();
 
 let redisClient: Redis | undefined;
 let redisStore: RedisStore | undefined;
@@ -74,10 +78,11 @@ function createRateLimiter(options: {
     },
     skip: (_req) => _req.method === 'OPTIONS' || _req.path === '/api/docs',
   };
-  const store = getRedisStore();
-  return rateLimit(
-    store !== undefined ? { ...base, store } : { ...base, store: SHARED_MEMORY_STORE },
-  );
+  // Each limiter needs its own store: express-rate-limit refuses to share a
+  // Store instance across limiters (ERR_ERL_STORE_REUSE). Falls back to a
+  // fresh per-limiter MemoryStore when no Redis is configured.
+  const store = getRedisStore() ?? new MemoryStore();
+  return rateLimit({ ...base, store });
 }
 
 const ONE_MINUTE = 60 * 1000;
