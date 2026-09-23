@@ -1,0 +1,84 @@
+// Prisma schema — user/authentication domain.
+//
+// Auth tables (User, RefreshToken, EmailVerification, PasswordReset) use
+// hard deletes: removing a user cascades to its tokens and verification
+// records. There is no soft-delete convention for auth data — expired
+// tokens are pruned rather than flagged.
+//
+// DATABASE_URL is provided by src/config/env.ts at runtime; the CLI needs
+// it exported in the shell (or via node --env-file=.env).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// System-wide identity roles.
+enum Role {
+  USER
+  ARTIST
+  ADMIN
+}
+
+/// Core identity model. `email` and `username` are unique (enforced as unique indexes).
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  passwordHash  String
+  name          String
+  username      String   @unique
+  role          Role     @default(USER)
+  emailVerified Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  refreshTokens      RefreshToken[]
+  emailVerifications EmailVerification[]
+  passwordResets     PasswordReset[]
+
+  @@index([email])
+  @@index([username])
+}
+
+/// Long-lived refresh token; `token` is unique for direct lookups during rotation.
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  token     String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// One-time email verification links.
+model EmailVerification {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  consumed  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// One-time password reset links.
+model PasswordReset {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  consumed  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
