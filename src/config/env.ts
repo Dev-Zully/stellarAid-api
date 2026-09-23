@@ -16,6 +16,7 @@ export interface AppEnv {
   readonly isProduction: boolean;
   readonly isTest: boolean;
   readonly port: number;
+  readonly redisUrl: string | undefined;
 }
 
 function readNodeEnv(): NodeEnv {
@@ -43,6 +44,17 @@ function readPort(): number {
   return port;
 }
 
+function readRedisUrl(): string | undefined {
+  const raw = process.env.REDIS_URL?.trim();
+  if (raw === undefined || raw === '') {
+    return undefined;
+  }
+  if (!/^rediss?:\/\//.test(raw)) {
+    throw new Error(`Invalid REDIS_URL "${raw}". Expected a redis:// or rediss:// URL.`);
+  }
+  return raw;
+}
+
 function loadEnv(): AppEnv {
   const nodeEnv = readNodeEnv();
   return {
@@ -51,6 +63,7 @@ function loadEnv(): AppEnv {
     isProduction: nodeEnv === 'production',
     isTest: nodeEnv === 'test',
     port: readPort(),
+    redisUrl: readRedisUrl(),
   };
 }
 
