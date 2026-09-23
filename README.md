@@ -14,6 +14,9 @@ cp .env.example .env
 npm run dev
 ```
 
+`.env` must provide `DATABASE_URL`, `JWT_SECRET` and `JWT_REFRESH_SECRET`
+(the defaults in `.env.example` work locally); startup fails fast otherwise.
+
 ## Scripts
 
 - `npm run dev` — dev server that restarts on file changes
@@ -66,3 +69,15 @@ Incoming `body` / `params` / `query` are validated against Zod schemas in
 `src/validators/` by the `validate()` middleware. Invalid requests return
 `422` with field-level errors and never reach a controller; controllers read
 parsed data through `getValidated()`.
+## Header policy
+
+Set in `src/app.ts`, in this order:
+
+| Layer         | Policy                                                                                                                                                              |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `helmet`      | Helmet defaults: CSP, HSTS (production), `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `X-DNS-Prefetch-Control`, and others. |
+| `cors`        | Credentialed CORS. Origins come from `CORS_ORIGIN` (comma-separated). When unset, the request origin is reflected so any frontend can connect during development.   |
+| `compression` | gzip/deflate encoding for compressible responses in every environment.                                                                                              |
+| Request ID    | Every response carries `X-Request-Id` (incoming `X-Request-Id` is reused when present, otherwise a UUID is generated) and it appears in that request's log lines.   |
+
+`X-Powered-By` is disabled.

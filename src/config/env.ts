@@ -2,13 +2,78 @@
  * Environment configuration.
  *
  * The single place that reads `process.env`. Values are parsed and validated
- * once at startup so a bad configuration fails fast with a clear message
- * instead of surfacing as a runtime surprise.
+ * once at startup with Zod so a bad configuration fails fast with a clear
+ * message instead of surfacing as a runtime surprise.
  */
 
+import { z } from 'zod';
+
 const DEFAULT_PORT = 3000;
+const MIN_SECRET_LENGTH = 16;
+
+const PORT_ERROR = 'PORT must be an integer between 0 and 65535.';
+
+/** Treat empty strings as "not provided" so `.env` keys can be left blank. */
+function emptyToUndefined(value: unknown): unknown {
+  return value === '' ? undefined : value;
+}
+
+const optionalString = z.preprocess(emptyToUndefined, z.string().min(1)).optional();
+const optionalUrl = z
+  .preprocess(emptyToUndefined, z.string().url('must be a valid URL'))
+  .optional();
+const optionalPort = z
+  .preprocess(
+    emptyToUndefined,
+    z.coerce
+      .number()
+      .int()
+      .min(1, 'must be a port between 1 and 65535.')
+      .max(65535, 'must be a port between 1 and 65535.'),
+  )
+  .optional();
+
+const schema = z.object({
+  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  PORT: z.coerce
+    .number({ error: PORT_ERROR })
+    .int(PORT_ERROR)
+    .min(0, PORT_ERROR)
+    .max(65535, PORT_ERROR)
+    .default(DEFAULT_PORT),
+  DATABASE_URL: z
+    .string()
+    .min(1, 'DATABASE_URL is required (postgresql://user:pass@host:5432/db).'),
+  REDIS_URL: optionalUrl.refine(
+    (v) => v === undefined || v.startsWith('redis://') || v.startsWith('rediss://'),
+    {
+      error: 'REDIS_URL must use the redis:// or rediss:// scheme.',
+    },
+  ),
+  JWT_SECRET: z
+    .string({ error: 'JWT_SECRET is required.' })
+    .min(MIN_SECRET_LENGTH, `JWT_SECRET must be at least ${MIN_SECRET_LENGTH} characters.`),
+  JWT_REFRESH_SECRET: z
+    .string({ error: 'JWT_REFRESH_SECRET is required.' })
+    .min(MIN_SECRET_LENGTH, `JWT_REFRESH_SECRET must be at least ${MIN_SECRET_LENGTH} characters.`),
+  S3_BUCKET: optionalString,
+  S3_REGION: optionalString,
+  STELLAR_NETWORK: z.enum(['testnet', 'public']).default('testnet'),
+  SMTP_HOST: optionalString,
+  SMTP_PORT: optionalPort,
+  SMTP_USER: optionalString,
+  SMTP_PASS: optionalString,
+  CORS_ORIGIN: optionalString,
+});
 
 export type NodeEnv = 'development' | 'production' | 'test';
+
+export interface SmtpConfig {
+  readonly host: string;
+  readonly port: number;
+  readonly user: string;
+  readonly pass: string;
+}
 
 export interface AppEnv {
   readonly nodeEnv: NodeEnv;
@@ -16,33 +81,30 @@ export interface AppEnv {
   readonly isProduction: boolean;
   readonly isTest: boolean;
   readonly port: number;
+  readonly databaseUrl: string;
   readonly redisUrl: string | undefined;
+  readonly jwtSecret: string;
+  readonly jwtRefreshSecret: string;
+  readonly s3Bucket: string | undefined;
+  readonly s3Region: string | undefined;
+  readonly stellarNetwork: 'testnet' | 'public';
+  /** Present only when SMTP_HOST, SMTP_PORT, SMTP_USER and SMTP_PASS are all set. */
+  readonly smtp: SmtpConfig | undefined;
+  /** Comma-separated allowed CORS origins, or undefined to reflect the request origin. */
+  readonly corsOrigins: string[] | undefined;
 }
 
-function readNodeEnv(): NodeEnv {
-  const raw = process.env.NODE_ENV?.trim().toLowerCase();
-  if (raw === undefined || raw === '') {
-    return 'development';
-  }
-  if (raw === 'development' || raw === 'production' || raw === 'test') {
-    return raw;
-  }
-  throw new Error(
-    `Invalid NODE_ENV "${process.env.NODE_ENV}". Expected one of: development, production, test.`,
-  );
+function formatIssues(error: z.ZodError): string {
+  return error.issues
+    .map((issue) => `  - ${issue.path.join('.') || '(root)'}: ${issue.message}`)
+    .join('\n');
 }
 
-function readPort(): number {
-  const raw = process.env.PORT?.trim();
-  if (raw === undefined || raw === '') {
-    return DEFAULT_PORT;
+function loadEnv(): AppEnv {
+  const parsed = schema.safeParse(process.env);
+  if (!parsed.success) {
+    throw new Error(`Invalid environment configuration:\n${formatIssues(parsed.error)}`);
   }
-  const port = Number.parseInt(raw, 10);
-  if (Number.isNaN(port) || port < 0 || port > 65535) {
-    throw new Error(`Invalid PORT "${raw}". Expected an integer between 0 and 65535.`);
-  }
-  return port;
-}
 
 function readRedisUrl(): string | undefined {
   const raw = process.env.REDIS_URL?.trim();
@@ -64,6 +126,35 @@ function loadEnv(): AppEnv {
     isTest: nodeEnv === 'test',
     port: readPort(),
     redisUrl: readRedisUrl(),
+  const raw = parsed.data;
+  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = raw;
+  const smtp: SmtpConfig | undefined =
+    SMTP_HOST !== undefined &&
+    SMTP_PORT !== undefined &&
+    SMTP_USER !== undefined &&
+    SMTP_PASS !== undefined
+      ? { host: SMTP_HOST, port: SMTP_PORT, user: SMTP_USER, pass: SMTP_PASS }
+      : undefined;
+
+  return {
+    nodeEnv: raw.NODE_ENV,
+    isDevelopment: raw.NODE_ENV === 'development',
+    isProduction: raw.NODE_ENV === 'production',
+    isTest: raw.NODE_ENV === 'test',
+    port: raw.PORT,
+    databaseUrl: raw.DATABASE_URL,
+    redisUrl: raw.REDIS_URL,
+    jwtSecret: raw.JWT_SECRET,
+    jwtRefreshSecret: raw.JWT_REFRESH_SECRET,
+    s3Bucket: raw.S3_BUCKET,
+    s3Region: raw.S3_REGION,
+    stellarNetwork: raw.STELLAR_NETWORK,
+    smtp,
+    corsOrigins: raw.CORS_ORIGIN
+      ? raw.CORS_ORIGIN.split(',')
+          .map((origin) => origin.trim())
+          .filter(Boolean)
+      : undefined,
   };
 }
 

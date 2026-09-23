@@ -13,7 +13,7 @@ export interface ApiErrorField {
 
 /** Error payload carried by failed API responses. */
 export interface ApiError {
-  readonly code?: string;
+  readonly code: string;
   readonly message: string;
   readonly details?: unknown;
   /** Present on validation failures (`VALIDATION_ERROR`). */

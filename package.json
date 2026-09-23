@@ -29,10 +29,18 @@
     "rate-limit-redis": "^6.0.1",
     "swagger-jsdoc": "^6.3.0",
     "swagger-ui-express": "^5.0.1",
+    "compression": "^1.8.2",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
+    "helmet": "^8.3.0",
+    "pino": "^10.3.1",
+    "pino-http": "^11.0.0",
     "zod": "^4.6.5"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/compression": "^1.8.1",
+    "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.2",
     "@types/swagger-jsdoc": "^6.0.4",
