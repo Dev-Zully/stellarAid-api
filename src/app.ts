@@ -20,6 +20,7 @@
 import cors from 'cors';
 import compression from 'compression';
 import express, { type Express } from 'express';
+import { errorHandler, globalLimiter, notFoundHandler } from '@/middlewares';
 import helmet from 'helmet';
 import { pinoHttp } from 'pino-http';
 import { randomUUID } from 'node:crypto';
@@ -67,6 +68,8 @@ export function createApp(): Express {
 
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
+
+  app.use(globalLimiter);
 
   app.use(apiRouter);
 

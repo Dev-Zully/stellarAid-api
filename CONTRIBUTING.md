@@ -136,12 +136,23 @@ route → controller → service
 
 1. Create `src/services/<feature>.service.ts` with the business logic.
 2. Create `src/controllers/<feature>.controller.ts` — a thin HTTP wrapper.
-3. Create `src/routes/<feature>.routes.ts` wiring routes to the controller.
-   Validate inputs with a schema in `src/validators/`.
+3. Create `src/routes/<feature>.routes.ts` **with the router factory**
+   (`createFeatureRouter('<feature>')`) and validate inputs by passing Zod
+   schemas from `src/validators/` to the `validate()` middleware.
 4. Export the new pieces from each folder's `index.ts` barrel.
-5. Mount the router in `src/routes/index.ts`.
-6. Run `npm run lint && npm run typecheck && npm run dev` and exercise the
+5. Mount the router in `src/routes/v1.routes.ts` under `/api/v1/`.
+6. Add `@openapi` JSDoc tags to the route so it shows up in Swagger at
+   `/api/docs`.
+7. Run `npm run lint && npm run typecheck && npm run dev` and exercise the
    endpoint.
+
+## Rate limits
+
+- Global limiter (100/min) applies in `src/app.ts` to every request.
+- Feature-specific limiters come from `src/middlewares/rate-limit.middleware.ts`:
+  auth is 10/min via the router factory, password reset 3/min.
+- With `REDIS_URL` set, limits use a Redis-backed store; otherwise a shared
+  in-memory store is used (fine for a single instance / local dev).
 
 ## Commit messages
 
