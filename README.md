@@ -21,6 +21,8 @@ npm run dev
 (the defaults in `.env.example` work locally); startup fails fast otherwise.
 
 Run the unit tests (`bcrypt` password util and friends) with `npm test`.
+Optionally seed the skill taxonomy: `npx prisma db seed` (idempotent —
+upserts by slug).
 
 ## Scripts
 
@@ -90,6 +92,7 @@ Incoming `body` / `params` / `query` are validated against Zod schemas in
 `src/validators/` by the `validate()` middleware. Invalid requests return
 `422` with field-level errors and never reach a controller; controllers read
 parsed data through `getValidated()`.
+
 ## Header policy
 
 Set in `src/app.ts`, in this order:

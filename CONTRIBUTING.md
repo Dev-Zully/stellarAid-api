@@ -46,15 +46,17 @@ curl http://localhost:3000/health/ready  # readiness — 200 when DB (and option
 
 ## Database (PostgreSQL + Prisma)
 
-- The Prisma schema lives in `prisma/schema.prisma`. Change a model, then
-  create a migration against a running PostgreSQL for your `DATABASE_URL`:
+- Local/CI databases are provisioned with Docker Compose (`docker-compose.yml`):
+  `postgres` on 5432 with a named volume and a health check, plus an isolated
+  `postgres-test` instance on 5433 for CI.
+- The schema lives in `prisma/schema.prisma`. Change a model, then create a
+  migration against a running PostgreSQL for your `DATABASE_URL`:
   ```bash
   npx prisma migrate dev --name describe_the_change
   ```
 - Prefer `npx prisma migrate deploy` in CI and for fresh environments.
-- Local/CI databases are provisioned with Docker Compose (`docker-compose.yml`):
-  `postgres` on 5432 with a named volume and a health check, plus an isolated
-  `postgres-test` instance on 5433 for CI.
+- Seed the skill taxonomy with `npx prisma db seed` (idempotent — upserts by
+  slug). Add new taxonomy entries to `prisma/seed.ts`.
 - `src/services/prisma.service.ts` is the single access point for the Prisma
   client (bounded pool via `connection_limit`). Never `new PrismaClient`
   elsewhere.
@@ -63,13 +65,15 @@ curl http://localhost:3000/health/ready  # readiness — 200 when DB (and option
 
 ### Schema conventions
 
-- Tables owned elsewhere (`User`, `Artwork`) are referenced as **plain indexed
-  `String` columns** (`buyerId`, `sellerId`, `userId`, `artworkId`, `authorId`,
-  `targetId`, `senderId`) — no cross-change Prisma relations. In-branch
-  references (`Transaction → Order/Commission`,
+- Tables owned elsewhere (`User`, `Artwork`, `Order`) are referenced as
+  **plain indexed `String` columns** (`buyerId`, `sellerId`, `userId`,
+  `artworkId`, `authorId`, `targetId`, `senderId`, `orderId`) — no
+  cross-change Prisma relations. Wire the relations up once those tables land.
+- In-branch references (`Transaction → Order/Commission`,
   `Deliverable → Commission`, `Review → Order/Commission`,
   `ReviewReply/ReviewReport → Review`, threads) are real relations.
-- Money uses `Decimal @db.Decimal(12, 2)`; ratings are `SmallInt`.
+- Money uses `Decimal @db.Decimal(12, 2)`; ratings are `SmallInt`; file sizes
+  use `BigInt @db.BigInt`; IDs are `String @id @default(uuid())`.
 - **CHECK constraints live in the migration SQL** (Prisma cannot express them):
   amounts are non-negative, `Transaction` links to an order XOR a commission
   (`num_nonnulls <= 1`), and `Review.rating` stays in 1–5. Keep them in sync
@@ -79,6 +83,9 @@ curl http://localhost:3000/health/ready  # readiness — 200 when DB (and option
   distinct, so each constraint independently scopes its own column).
 - Money records are immutable: `Transaction` FKs to `Order`/`Commission` use
   `onDelete: Restrict`.
+- Many-to-many junctions (`ArtworkMedia`, `PortfolioMedia`, `OrderDeliverable`)
+  use composite `@@id` and cascade deletes to the join rows; the `Media` row
+  itself is retained for orphan sweeps.
 
 ### State machines
 
