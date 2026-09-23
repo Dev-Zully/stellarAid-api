@@ -59,7 +59,9 @@
     "tsc-alias": "^1.9.5",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.70.1"
+    "typescript-eslint": "^8.70.1",
+    "prisma": "^6.19.3",
+    "tsx": "^4.23.15"
   },
   "engines": {
     "node": ">=20"
@@ -72,5 +74,8 @@
     "*.{json,md,yml,yaml}": [
       "prettier --write"
     ]
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   }
 }

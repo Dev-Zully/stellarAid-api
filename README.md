@@ -20,6 +20,9 @@ npm run dev
 `.env` must provide `DATABASE_URL`, `JWT_SECRET` and `JWT_REFRESH_SECRET`
 (the defaults in `.env.example` work locally); startup fails fast otherwise.
 
+Optionally seed the skill taxonomy: `npx prisma db seed` (idempotent —
+upserts by slug).
+
 ## Scripts
 
 - `npm run dev` — dev server that restarts on file changes

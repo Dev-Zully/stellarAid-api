@@ -48,44 +48,33 @@ curl http://localhost:3000/health/ready  # readiness — 200 when DB (and option
   `postgres` on 5432 with a named volume and a health check, plus an isolated
   `postgres-test` instance on 5433 for CI.
 - The schema lives in `prisma/schema.prisma`. Change a model, then create a
-  migration:
+  migration against a running PostgreSQL for your `DATABASE_URL`:
   ```bash
   npx prisma migrate dev --name describe_the_change
   ```
 - Prefer `npx prisma migrate deploy` in CI and for fresh environments.
+- Seed the skill taxonomy with `npx prisma db seed` (idempotent — upserts by
+  slug). Add new taxonomy entries to `prisma/seed.ts`.
 - The Prisma client is a singleton in `src/services/prisma.service.ts` with a
   bounded pool (`connection_limit`). Runtime access to the client happens only
-  through that module.
+  through that module; never `new PrismaClient` elsewhere.
+- Auth tables (`User`, `RefreshToken`, `EmailVerification`, `PasswordReset`)
+  use hard deletes — removing a user cascades to tokens.
+
+### Schema conventions
+
+- Tables owned elsewhere (`User`, `Order`) are referenced as **plain indexed
+  `String` columns** (`userId`, `orderId`) — no Prisma relations across
+  change boundaries. Wire the relations up once those tables land.
+- Many-to-many junctions (`ArtworkMedia`, `PortfolioMedia`,
+  `OrderDeliverable`) use composite `@@id` and cascade deletes to the join
+  rows; the `Media` row itself is retained for orphan sweeps.
+- Money uses `Decimal @db.Decimal(12, 2)`; file sizes use `BigInt @db.BigInt`;
+  IDs are `String @id @default(uuid())`.
 
 ## Health and lifecycle
 
 - `/health` and `/health/live` are plain liveness probes (always 200).
-- `/health/ready` checks the database (`SELECT 1`) and, when `REDIS_URL` is
-  set, a TCP connect to Redis; it returns 503 when the database is down.
-- `src/index.ts` connects the database before it starts listening and reverses
-  the order on shutdown (drain in-flight requests → close the pool → exit) for
-  `SIGTERM`/`SIGINT`.
-
-## Database (PostgreSQL + Prisma)
-
-- Local/CI databases are provisioned with Docker Compose (`docker-compose.yml`):
-  `postgres` on 5432 with a named volume and a health check, plus an isolated
-  `postgres-test` instance on 5433 for CI.
-- The schema lives in `prisma/schema.prisma`. Change a model, then create a
-  migration:
-  ```bash
-  npx prisma migrate dev --name describe_the_change
-  ```
-- Prefer `npx prisma migrate deploy` in CI and for fresh environments.
-- The Prisma client is a singleton in `src/services/prisma.service.ts` with a
-  bounded pool (`connection_limit`). Runtime access to the client happens only
-  through that module.
-- Auth tables (`User`, `RefreshToken`, `EmailVerification`, `PasswordReset`)
-  use hard deletes — removing a user cascades to tokens.
-
-## Health and lifecycle
-
-- `/health/live` is a plain liveness probe (always 200).
 - `/health/ready` checks the database (`SELECT 1`) and, when `REDIS_URL` is
   set, a TCP connect to Redis; it returns 503 when the database is down.
 - `src/index.ts` connects the database before it starts listening and reverses
