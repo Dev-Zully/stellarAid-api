@@ -1,12 +1,32 @@
-// Prisma schema — user/authentication domain.
+// Prisma schema — lumora data model.
 //
-// Auth tables (User, RefreshToken, EmailVerification, PasswordReset) use
-// hard deletes: removing a user cascades to its tokens and verification
-// records. There is no soft-delete convention for auth data — expired
-// tokens are pruned rather than flagged.
+// Auth domain: `User`, `RefreshToken`, `EmailVerification`, `PasswordReset`
+// use hard deletes — removing a user cascades to its tokens and verification
+// records. There is no soft-delete convention for auth data; expired tokens
+// are pruned rather than flagged.
 //
-// DATABASE_URL is provided by src/config/env.ts at runtime; the CLI needs
-// it exported in the shell (or via node --env-file=.env).
+// Commerce scope note: artwork/product (`Artwork`, `Skill`) and other
+// cross-change tables are referenced with plain indexed String columns
+// (`buyerId`, `sellerId`, `userId`, `artworkId`, `authorId`, `targetId`,
+// `senderId`); references inside this change (Order → Transaction/Review,
+// Commission → Transaction/Deliverable/Review,
+// Review → ReviewReply/ReviewReport, message threads) are real relations.
+//
+// DB-level CHECKs that Prisma cannot express in the schema are declared in
+// the migration SQL: amounts stay >= 0, `Transaction` links to an order or a
+// commission but never both, and `Review.rating` stays within 1–5. Keep them
+// in sync when touching those models.
+//
+// State machines (documented, then enforced in the service layer):
+//   OrderStatus:         PENDING → PROCESSING → COMPLETED → REFUNDED
+//                                     ↘ FAILED
+//   CommissionStatus:    PENDING → ACCEPTED → IN_PROGRESS → DELIVERED → COMPLETED;
+//                        any state except COMPLETED may move to CANCELLED/DISPUTED
+//   DeliverableStatus:   UPLOADED → SUBMITTED → ACCEPTED | REJECTED
+//   ReviewReportStatus:  OPEN → REVIEWING → RESOLVED | DISMISSED
+//
+// Accountability: money history is immutable — deleting an Order or
+// Commission referenced by a Transaction is restricted (Restrict).
 
 generator client {
   provider = "prisma-client-js"
@@ -17,7 +37,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-/// System-wide identity roles.
 enum Role {
   USER
   ARTIST
@@ -81,4 +100,231 @@ model PasswordReset {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+/// Assets a contract can be priced in.
+enum Asset {
+  USDC
+  XLM
+}
+
+enum OrderStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum TransactionType {
+  PURCHASE
+  PAYOUT
+  FEE
+  REFUND
+}
+
+enum CommissionStatus {
+  PENDING
+  ACCEPTED
+  IN_PROGRESS
+  DELIVERED
+  COMPLETED
+  CANCELLED
+  DISPUTED
+}
+
+enum DeliverableType {
+  WIP
+  FINAL
+}
+
+enum DeliverableStatus {
+  UPLOADED
+  SUBMITTED
+  ACCEPTED
+  REJECTED
+}
+
+enum ReviewReportStatus {
+  OPEN
+  REVIEWING
+  RESOLVED
+  DISMISSED
+}
+
+/// Purchase of an artwork. `artworkId` references the Artwork table
+/// delivered elsewhere.
+model Order {
+  id           String        @id @default(uuid())
+  buyerId      String
+  sellerId     String
+  artworkId    String
+  amount       Decimal       @db.Decimal(12, 2)
+  asset        Asset
+  platformFee  Decimal       @db.Decimal(12, 2)
+  status       OrderStatus   @default(PENDING)
+  txHash       String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  transactions Transaction[]
+  reviews      Review[]
+
+  @@index([buyerId])
+  @@index([sellerId])
+  @@index([artworkId])
+  @@index([status])
+}
+
+/// Single ledger entry. Links to an order XOR a commission (CHECK 704),
+/// never both.
+model Transaction {
+  id           String          @id @default(uuid())
+  orderId      String?
+  commissionId String?
+  userId       String
+  type         TransactionType
+  amount       Decimal         @db.Decimal(12, 2)
+  asset        Asset
+  txHash       String
+  network      String
+  confirmed    Boolean         @default(false)
+  createdAt    DateTime        @default(now())
+  order        Order?          @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  commission   Commission?     @relation(fields: [commissionId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([commissionId])
+  @@index([userId, type])
+  @@index([network, confirmed])
+}
+
+/// Custom work contract between a client and an artist.
+model Commission {
+  id           String           @id @default(uuid())
+  clientId     String
+  artistId     String
+  title        String
+  description  String?
+  budget       Decimal          @db.Decimal(12, 2)
+  asset        Asset
+  deadline     DateTime
+  status       CommissionStatus @default(PENDING)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  transactions Transaction[]
+  deliverables Deliverable[]
+  reviews      Review[]
+
+  @@index([clientId])
+  @@index([artistId])
+  @@index([status])
+}
+
+/// A version of a commission deliverable — WIP drafts or the FINAL artefact.
+model Deliverable {
+  id           String            @id @default(uuid())
+  commissionId String
+  note         String?
+  type         DeliverableType
+  status       DeliverableStatus @default(UPLOADED)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  commission   Commission        @relation(fields: [commissionId], references: [id], onDelete: Cascade)
+
+  @@index([commissionId, type])
+  @@index([status])
+}
+
+/// Reputation review. `authorId`/`targetId` reference users delivered
+/// elsewhere; `orderId`/`commissionId` come from this change. One review per
+/// order and one per commission is enforced by the two DB uniques below
+/// (Postgres treats NULLs as distinct, so each constraint independently
+/// scopes its own nullable column). Rating constrained to 1–5 in SQL.
+model Review {
+  id           String         @id @default(uuid())
+  orderId      String?
+  commissionId String?
+  authorId     String
+  targetId     String
+  rating       Int            @db.SmallInt
+  title        String?
+  body         String
+  edited       Boolean        @default(false)
+  createdAt    DateTime       @default(now())
+  order        Order?         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  commission   Commission?    @relation(fields: [commissionId], references: [id], onDelete: Restrict)
+  replies      ReviewReply[]
+  reports      ReviewReport[]
+
+  @@unique([orderId])
+  @@unique([commissionId])
+  @@index([targetId])
+  @@index([authorId])
+}
+
+model ReviewReply {
+  id        String   @id @default(uuid())
+  reviewId  String
+  body      String
+  createdAt DateTime @default(now())
+  review    Review   @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+
+  @@index([reviewId])
+}
+
+/// A 1:1 conversation. Participants are validated at the application layer
+/// (two distinct users, no self-threads) before a thread is created.
+model MessageThread {
+  id           String              @id @default(uuid())
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  participants ThreadParticipant[]
+  messages     Message[]
+}
+
+model ThreadParticipant {
+  threadId String
+  userId   String
+  thread   MessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@id([threadId, userId])
+}
+
+model Message {
+  id        String        @id @default(uuid())
+  threadId  String
+  senderId  String
+  body      String
+  readAt    DateTime?
+  createdAt DateTime      @default(now())
+  thread    MessageThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId])
+}
+
+/// Polymorphic payloads live in `data` (any JSON shape), keep the queue safe.
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String
+  type      String
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, readAt])
+  @@index([createdAt])
+}
+
+/// Moderation report against a review. Status moves OPEN → REVIEWING →
+/// RESOLVED | DISMISSED.
+model ReviewReport {
+  id         String             @id @default(uuid())
+  reviewId   String
+  reporterId String
+  reason     String
+  status     ReviewReportStatus @default(OPEN)
+  createdAt  DateTime           @default(now())
+  review     Review             @relation(fields: [reviewId], references: [id], onDelete: Restrict)
+
+  @@index([reviewId])
+  @@index([status])
 }
