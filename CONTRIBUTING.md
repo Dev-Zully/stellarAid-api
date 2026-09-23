@@ -41,6 +41,8 @@ curl http://localhost:3000/health/ready  # readiness — 200 when DB (and option
 | `npm run lint:fix`     | Run ESLint and auto-fix what it can                             |
 | `npm run format`       | Rewrite files with Prettier                                     |
 | `npm run format:check` | Verify formatting without writing files                         |
+| `npm test`             | Run the unit tests once (vitest)                                |
+| `npm run test:watch`   | Run the unit tests in watch mode                                |
 
 ## Database (PostgreSQL + Prisma)
 
@@ -55,22 +57,52 @@ curl http://localhost:3000/health/ready  # readiness — 200 when DB (and option
 - Prefer `npx prisma migrate deploy` in CI and for fresh environments.
 - Seed the skill taxonomy with `npx prisma db seed` (idempotent — upserts by
   slug). Add new taxonomy entries to `prisma/seed.ts`.
-- The Prisma client is a singleton in `src/services/prisma.service.ts` with a
-  bounded pool (`connection_limit`). Runtime access to the client happens only
-  through that module; never `new PrismaClient` elsewhere.
+- `src/services/prisma.service.ts` is the single access point for the Prisma
+  client (bounded pool via `connection_limit`). Never `new PrismaClient`
+  elsewhere.
 - Auth tables (`User`, `RefreshToken`, `EmailVerification`, `PasswordReset`)
   use hard deletes — removing a user cascades to tokens.
 
 ### Schema conventions
 
-- Tables owned elsewhere (`User`, `Order`) are referenced as **plain indexed
-  `String` columns** (`userId`, `orderId`) — no Prisma relations across
-  change boundaries. Wire the relations up once those tables land.
-- Many-to-many junctions (`ArtworkMedia`, `PortfolioMedia`,
-  `OrderDeliverable`) use composite `@@id` and cascade deletes to the join
-  rows; the `Media` row itself is retained for orphan sweeps.
-- Money uses `Decimal @db.Decimal(12, 2)`; file sizes use `BigInt @db.BigInt`;
-  IDs are `String @id @default(uuid())`.
+- Tables owned elsewhere (`User`, `Artwork`, `Order`) are referenced as
+  **plain indexed `String` columns** (`buyerId`, `sellerId`, `userId`,
+  `artworkId`, `authorId`, `targetId`, `senderId`, `orderId`) — no
+  cross-change Prisma relations. Wire the relations up once those tables land.
+- In-branch references (`Transaction → Order/Commission`,
+  `Deliverable → Commission`, `Review → Order/Commission`,
+  `ReviewReply/ReviewReport → Review`, threads) are real relations.
+- Money uses `Decimal @db.Decimal(12, 2)`; ratings are `SmallInt`; file sizes
+  use `BigInt @db.BigInt`; IDs are `String @id @default(uuid())`.
+- **CHECK constraints live in the migration SQL** (Prisma cannot express them):
+  amounts are non-negative, `Transaction` links to an order XOR a commission
+  (`num_nonnulls <= 1`), and `Review.rating` stays in 1–5. Keep them in sync
+  when you modify those models.
+- One review per order and one per commission is enforced by two separate
+  `@@unique` constraints on NULLable columns (Postgres treats NULLs as
+  distinct, so each constraint independently scopes its own column).
+- Money records are immutable: `Transaction` FKs to `Order`/`Commission` use
+  `onDelete: Restrict`.
+- Many-to-many junctions (`ArtworkMedia`, `PortfolioMedia`, `OrderDeliverable`)
+  use composite `@@id` and cascade deletes to the join rows; the `Media` row
+  itself is retained for orphan sweeps.
+
+### State machines
+
+Documented at the top of `prisma/schema.prisma`, enforced in the service layer:
+
+- `OrderStatus`: `PENDING → PROCESSING → COMPLETED → REFUNDED`, with
+  `PENDING/PROCESSING → FAILED`.
+- `CommissionStatus`: `PENDING → ACCEPTED → IN_PROGRESS → DELIVERED →
+COMPLETED`; any state except `COMPLETED` may move to `CANCELLED`/`DISPUTED`.
+- `DeliverableStatus`: `UPLOADED → SUBMITTED → ACCEPTED | REJECTED`.
+- `ReviewReportStatus`: `OPEN → REVIEWING → RESOLVED | DISMISSED`.
+
+## Password hashing
+
+`src/utils/password.ts` exports `hashPassword` / `comparePassword` (bcrypt,
+cost factor **12** in `BCRYPT_COST`). Compare is constant-time. Unit tests are
+colocated: `src/utils/password.test.ts` (run with `npm test`).
 
 ## Health and lifecycle
 

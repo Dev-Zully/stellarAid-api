@@ -1,27 +1,5 @@
 {
-  "name": "lumora-services",
-  "version": "0.1.0",
-  "description": "lumora-services backend API built with Express and TypeScript",
-  "main": "dist/index.js",
-  "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only -r tsconfig-paths/register src/index.ts",
-    "build": "tsc && tsc-alias",
-    "start": "node dist/index.js",
-    "typecheck": "tsc --noEmit",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
-    "prepare": "husky"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git@github-ahmadogo:ahmadogo/stellarAid-api.git"
-  },
-  "keywords": [],
   "author": "",
-  "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
     "@prisma/client": "^6.19.3",
     "bcrypt": "^6.0.0",
@@ -39,6 +17,7 @@
     "swagger-ui-express": "^5.0.1",
     "zod": "^4.6.5"
   },
+  "description": "lumora-services backend API built with Express and TypeScript",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/bcrypt": "^6.0.0",
@@ -58,24 +37,47 @@
     "ts-node-dev": "^2.0.0",
     "tsc-alias": "^1.9.5",
     "tsconfig-paths": "^4.2.0",
+    "tsx": "^4.23.15",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.70.1",
-    "prisma": "^6.19.3",
-    "tsx": "^4.23.15"
+    "vitest": "^5.0.1"
   },
   "engines": {
     "node": ">=20"
   },
+  "keywords": [],
+  "license": "ISC",
   "lint-staged": {
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ],
     "src/**/*.ts": [
       "eslint --fix",
       "prettier --write"
-    ],
-    "*.{json,md,yml,yaml}": [
-      "prettier --write"
     ]
   },
+  "main": "dist/index.js",
+  "name": "lumora-services",
   "prisma": {
     "seed": "tsx prisma/seed.ts"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github-ahmadogo:ahmadogo/stellarAid-api.git"
+  },
+  "scripts": {
+    "build": "tsc && tsc-alias",
+    "dev": "ts-node-dev --respawn --transpile-only -r tsconfig-paths/register src/index.ts",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "prepare": "husky",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "type": "commonjs",
+  "version": "0.1.0"
 }
