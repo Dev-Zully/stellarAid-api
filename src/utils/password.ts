@@ -1,9 +1,8 @@
 /**
  * Password hashing helpers.
  *
- * bcrypt with cost factor 12 documented in BCRYPT_COST.
- * - Hashes are one-way; the raw password is never recoverable.
- * - `comparePassword` uses bcrypt's constant-time comparison.
+ * bcrypt with cost factor 12. Hashes are one-way and `comparePassword` uses
+ * bcrypt's constant-time comparison.
  */
 
 import bcrypt from 'bcrypt';
