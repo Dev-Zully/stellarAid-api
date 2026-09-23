@@ -29,3 +29,8 @@ export const refreshSchema = z.object({
 export const verifyEmailSchema = z.object({
   token: z.string().trim().min(1, 'token is required.'),
 });
+
+export type RegisterSchema = z.infer<typeof registerSchema>;
+export type LoginSchema = z.infer<typeof loginSchema>;
+export type RefreshSchema = z.infer<typeof refreshSchema>;
+export type VerifyEmailSchema = z.infer<typeof verifyEmailSchema>;

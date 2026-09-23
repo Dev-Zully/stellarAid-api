@@ -196,6 +196,20 @@ route → controller → service
 - With `REDIS_URL` set, limits use a Redis-backed store; otherwise a shared
   in-memory store is used (fine for a single instance / local dev).
 
+## Authentication
+
+- Session logic lives in `src/services/auth.service.ts` and
+  `src/services/token.service.ts`; controllers are thin wrappers and routes
+  only wire validators + handlers (see `src/routes/auth.routes.ts`).
+- Access tokens are HS256 JWTs (payload `sub` + `role`) signed with
+  `JWT_SECRET`; refresh tokens are opaque random values whose SHA‑256 is
+  stored in `RefreshToken` and never leave the DB in plain form.
+- Lifetimes come from `ACCESS_TOKEN_TTL` (string, `jsonwebtoken`-style, e.g.
+  `15m`) and `REFRESH_TOKEN_TTL_DAYS` (integer). Both default and are
+  validated in `src/config/env.ts` together with the two required secrets.
+- Passwords are hashed with bcrypt cost factor 12 (`src/utils/password.ts`);
+  never log or return a password hash.
+
 ## Commit messages
 
 Use [Conventional Commits](https://www.conventionalcommits.org/):
