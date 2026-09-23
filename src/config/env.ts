@@ -106,26 +106,6 @@ function loadEnv(): AppEnv {
     throw new Error(`Invalid environment configuration:\n${formatIssues(parsed.error)}`);
   }
 
-function readRedisUrl(): string | undefined {
-  const raw = process.env.REDIS_URL?.trim();
-  if (raw === undefined || raw === '') {
-    return undefined;
-  }
-  if (!/^rediss?:\/\//.test(raw)) {
-    throw new Error(`Invalid REDIS_URL "${raw}". Expected a redis:// or rediss:// URL.`);
-  }
-  return raw;
-}
-
-function loadEnv(): AppEnv {
-  const nodeEnv = readNodeEnv();
-  return {
-    nodeEnv,
-    isDevelopment: nodeEnv === 'development',
-    isProduction: nodeEnv === 'production',
-    isTest: nodeEnv === 'test',
-    port: readPort(),
-    redisUrl: readRedisUrl(),
   const raw = parsed.data;
   const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = raw;
   const smtp: SmtpConfig | undefined =
