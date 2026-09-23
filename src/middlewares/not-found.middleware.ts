@@ -3,11 +3,8 @@
  */
 
 import type { Request, Response } from 'express';
-import type { ApiResponse } from '@/types';
+import { AppError, catchAsync } from './app-error.middleware';
 
-export function notFoundHandler(req: Request, res: Response<ApiResponse>): void {
-  res.status(404).json({
-    success: false,
-    error: { message: `Cannot ${req.method} ${req.originalUrl}` },
-  });
-}
+export const notFoundHandler = catchAsync((req: Request, _res: Response) => {
+  throw AppError.notFound(`Cannot ${req.method} ${req.originalUrl}`);
+});
