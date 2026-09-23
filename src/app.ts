@@ -6,7 +6,7 @@
  */
 
 import express, { type Express } from 'express';
-import { errorHandler, notFoundHandler } from '@/middlewares';
+import { errorHandler, globalLimiter, notFoundHandler } from '@/middlewares';
 import { apiRouter } from '@/routes';
 
 export function createApp(): Express {
@@ -15,6 +15,8 @@ export function createApp(): Express {
   app.disable('x-powered-by');
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
+
+  app.use(globalLimiter);
 
   app.use(apiRouter);
 
