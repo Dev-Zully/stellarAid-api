@@ -15,7 +15,7 @@ document in the same change.
 
 ```bash
 npm install          # also installs git hooks via the `prepare` script
-cp .env.example .env # optional — defaults work out of the box
+cp .env.example .env # required — DATABASE_URL, JWT_SECRET, JWT_REFRESH_SECRET have no defaults
 npm run dev
 ```
 
@@ -107,6 +107,11 @@ route → controller → service
 ### Environment variables
 
 - Nothing outside `src/config/env.ts` may read `process.env`.
+- The config module validates `process.env` with a Zod schema at startup and
+  throws a clear, itemized error when a required variable is missing or a
+  value is invalid (fail fast).
+- `DATABASE_URL`, `JWT_SECRET` and `JWT_REFRESH_SECRET` are required;
+  everything else has a default or is optional (see `.env.example`).
 - Add new variables there, with validation and a sensible default, plus an
   entry in `.env.example`.
 - There is no `dotenv` dependency. Pass variables through your shell, or run
