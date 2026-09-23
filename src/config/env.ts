@@ -10,6 +10,8 @@ import { z } from 'zod';
 
 const DEFAULT_PORT = 3000;
 const MIN_SECRET_LENGTH = 16;
+const DEFAULT_ACCESS_TOKEN_TTL = '15m';
+const DEFAULT_REFRESH_TOKEN_TTL_DAYS = 7;
 
 const PORT_ERROR = 'PORT must be an integer between 0 and 65535.';
 
@@ -56,6 +58,12 @@ const schema = z.object({
   JWT_REFRESH_SECRET: z
     .string({ error: 'JWT_REFRESH_SECRET is required.' })
     .min(MIN_SECRET_LENGTH, `JWT_REFRESH_SECRET must be at least ${MIN_SECRET_LENGTH} characters.`),
+  ACCESS_TOKEN_TTL: z.string().min(1).default(DEFAULT_ACCESS_TOKEN_TTL),
+  REFRESH_TOKEN_TTL_DAYS: z.coerce
+    .number()
+    .int()
+    .positive('REFRESH_TOKEN_TTL_DAYS must be a positive integer.')
+    .default(DEFAULT_REFRESH_TOKEN_TTL_DAYS),
   S3_BUCKET: optionalString,
   S3_REGION: optionalString,
   STELLAR_NETWORK: z.enum(['testnet', 'public']).default('testnet'),
@@ -85,6 +93,10 @@ export interface AppEnv {
   readonly redisUrl: string | undefined;
   readonly jwtSecret: string;
   readonly jwtRefreshSecret: string;
+  /** JWT access-token lifetime, as accepted by `jsonwebtoken` (e.g. '15m'). */
+  readonly accessTokenTtl: string;
+  /** Refresh-token lifetime in days; stored hashed and revocable. */
+  readonly refreshTokenTtlDays: number;
   readonly s3Bucket: string | undefined;
   readonly s3Region: string | undefined;
   readonly stellarNetwork: 'testnet' | 'public';
@@ -126,6 +138,8 @@ function loadEnv(): AppEnv {
     redisUrl: raw.REDIS_URL,
     jwtSecret: raw.JWT_SECRET,
     jwtRefreshSecret: raw.JWT_REFRESH_SECRET,
+    accessTokenTtl: raw.ACCESS_TOKEN_TTL,
+    refreshTokenTtlDays: raw.REFRESH_TOKEN_TTL_DAYS,
     s3Bucket: raw.S3_BUCKET,
     s3Region: raw.S3_REGION,
     stellarNetwork: raw.STELLAR_NETWORK,
