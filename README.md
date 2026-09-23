@@ -20,12 +20,15 @@ npm run dev
 `.env` must provide `DATABASE_URL`, `JWT_SECRET` and `JWT_REFRESH_SECRET`
 (the defaults in `.env.example` work locally); startup fails fast otherwise.
 
+Run the unit tests (`bcrypt` password util and friends) with `npm test`.
+
 ## Scripts
 
 - `npm run dev` — dev server that restarts on file changes
 - `npm run build` — compile to `dist/` (with path aliases rewritten)
 - `npm start` — run the compiled build
 - `npm run lint` / `npm run format` — code quality
+- `npm test` — run the unit tests once (vitest)
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full script table, the project
 structure and all conventions.
