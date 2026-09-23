@@ -51,10 +51,15 @@ curl http://localhost:3000/health/ready  # readiness — 200 when DB (and option
   ```bash
   npx prisma migrate dev --name describe_the_change
   ```
-- Use `npx prisma migrate deploy` for fresh environments and CI.
+- Prefer `npx prisma migrate deploy` in CI and for fresh environments.
+- Local/CI databases are provisioned with Docker Compose (`docker-compose.yml`):
+  `postgres` on 5432 with a named volume and a health check, plus an isolated
+  `postgres-test` instance on 5433 for CI.
 - `src/services/prisma.service.ts` is the single access point for the Prisma
   client (bounded pool via `connection_limit`). Never `new PrismaClient`
   elsewhere.
+- Auth tables (`User`, `RefreshToken`, `EmailVerification`, `PasswordReset`)
+  use hard deletes — removing a user cascades to tokens.
 
 ### Schema conventions
 
@@ -82,7 +87,7 @@ Documented at the top of `prisma/schema.prisma`, enforced in the service layer:
 - `OrderStatus`: `PENDING → PROCESSING → COMPLETED → REFUNDED`, with
   `PENDING/PROCESSING → FAILED`.
 - `CommissionStatus`: `PENDING → ACCEPTED → IN_PROGRESS → DELIVERED →
-  COMPLETED`; any state except `COMPLETED` may move to `CANCELLED`/`DISPUTED`.
+COMPLETED`; any state except `COMPLETED` may move to `CANCELLED`/`DISPUTED`.
 - `DeliverableStatus`: `UPLOADED → SUBMITTED → ACCEPTED | REJECTED`.
 - `ReviewReportStatus`: `OPEN → REVIEWING → RESOLVED | DISMISSED`.
 
@@ -92,50 +97,9 @@ Documented at the top of `prisma/schema.prisma`, enforced in the service layer:
 cost factor **12** in `BCRYPT_COST`). Compare is constant-time. Unit tests are
 colocated: `src/utils/password.test.ts` (run with `npm test`).
 
-## Database (PostgreSQL + Prisma)
-
-- Local/CI databases are provisioned with Docker Compose (`docker-compose.yml`):
-  `postgres` on 5432 with a named volume and a health check, plus an isolated
-  `postgres-test` instance on 5433 for CI.
-- The schema lives in `prisma/schema.prisma`. Change a model, then create a
-  migration:
-  ```bash
-  npx prisma migrate dev --name describe_the_change
-  ```
-- Prefer `npx prisma migrate deploy` in CI and for fresh environments.
-- The Prisma client is a singleton in `src/services/prisma.service.ts` with a
-  bounded pool (`connection_limit`). Runtime access to the client happens only
-  through that module.
-
 ## Health and lifecycle
 
 - `/health` and `/health/live` are plain liveness probes (always 200).
-- `/health/ready` checks the database (`SELECT 1`) and, when `REDIS_URL` is
-  set, a TCP connect to Redis; it returns 503 when the database is down.
-- `src/index.ts` connects the database before it starts listening and reverses
-  the order on shutdown (drain in-flight requests → close the pool → exit) for
-  `SIGTERM`/`SIGINT`.
-
-## Database (PostgreSQL + Prisma)
-
-- Local/CI databases are provisioned with Docker Compose (`docker-compose.yml`):
-  `postgres` on 5432 with a named volume and a health check, plus an isolated
-  `postgres-test` instance on 5433 for CI.
-- The schema lives in `prisma/schema.prisma`. Change a model, then create a
-  migration:
-  ```bash
-  npx prisma migrate dev --name describe_the_change
-  ```
-- Prefer `npx prisma migrate deploy` in CI and for fresh environments.
-- The Prisma client is a singleton in `src/services/prisma.service.ts` with a
-  bounded pool (`connection_limit`). Runtime access to the client happens only
-  through that module.
-- Auth tables (`User`, `RefreshToken`, `EmailVerification`, `PasswordReset`)
-  use hard deletes — removing a user cascades to tokens.
-
-## Health and lifecycle
-
-- `/health/live` is a plain liveness probe (always 200).
 - `/health/ready` checks the database (`SELECT 1`) and, when `REDIS_URL` is
   set, a TCP connect to Redis; it returns 503 when the database is down.
 - `src/index.ts` connects the database before it starts listening and reverses
