@@ -5,12 +5,15 @@ Express + TypeScript backend service.
 ## Requirements
 
 - Node.js >= 20
+- PostgreSQL 14+ (needed for the database and Prisma migrations)
 
 ## Quick start
 
 ```bash
 npm install
 cp .env.example .env
+docker compose up -d postgres   # starts a health-checked PostgreSQL
+npx prisma migrate deploy       # apply the schema migrations
 npm run dev
 ```
 
@@ -30,14 +33,29 @@ structure and all conventions.
 ## Health check
 
 ```bash
-curl http://localhost:3000/health
+curl http://localhost:3000/health        # liveness — always 200
+curl http://localhost:3000/health/live   # liveness — always 200
+curl http://localhost:3000/health/ready  # readiness — DB (and Redis when set)
 ```
+
+`/health`:
 
 ```json
 { "status": "ok", "uptime": 4.2, "timestamp": "2026-09-23T09:00:00.000Z" }
 ```
 
-The port is configurable with `PORT` — see `.env.example`.
+`/health/ready` (healthy):
+
+```json
+{
+  "status": "ready",
+  "checks": { "database": "ok", "redis": "not_configured" },
+  "timestamp": "2026-09-23T09:00:00.000Z"
+}
+```
+
+`/health/ready` returns `503` when the database is unreachable. The port is
+configurable with `PORT` — see `.env.example`.
 
 ## API versioning
 

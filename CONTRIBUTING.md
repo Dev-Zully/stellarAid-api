@@ -16,14 +16,17 @@ document in the same change.
 ```bash
 npm install          # also installs git hooks via the `prepare` script
 cp .env.example .env # required — DATABASE_URL, JWT_SECRET, JWT_REFRESH_SECRET have no defaults
+docker compose up -d postgres # start PostgreSQL (health-checked)
+npx prisma migrate deploy     # apply migrations to the local database
 npm run dev
 ```
 
-The server listens on `PORT` (default `3000`). Sanity check it:
+The server listens on `PORT` (default `3000`). Startup fails fast when the
+database is unreachable. Sanity check it:
 
 ```bash
-curl http://localhost:3000/health
-# {"status":"ok","uptime":4.2,"timestamp":"2026-09-23T09:00:00.000Z"}
+curl http://localhost:3000/health/live   # liveness — always 200
+curl http://localhost:3000/health/ready  # readiness — 200 when DB (and optional Redis) are up
 ```
 
 ## npm scripts
@@ -38,6 +41,56 @@ curl http://localhost:3000/health
 | `npm run lint:fix`     | Run ESLint and auto-fix what it can                             |
 | `npm run format`       | Rewrite files with Prettier                                     |
 | `npm run format:check` | Verify formatting without writing files                         |
+
+## Database (PostgreSQL + Prisma)
+
+- Local/CI databases are provisioned with Docker Compose (`docker-compose.yml`):
+  `postgres` on 5432 with a named volume and a health check, plus an isolated
+  `postgres-test` instance on 5433 for CI.
+- The schema lives in `prisma/schema.prisma`. Change a model, then create a
+  migration:
+  ```bash
+  npx prisma migrate dev --name describe_the_change
+  ```
+- Prefer `npx prisma migrate deploy` in CI and for fresh environments.
+- The Prisma client is a singleton in `src/services/prisma.service.ts` with a
+  bounded pool (`connection_limit`). Runtime access to the client happens only
+  through that module.
+
+## Health and lifecycle
+
+- `/health` and `/health/live` are plain liveness probes (always 200).
+- `/health/ready` checks the database (`SELECT 1`) and, when `REDIS_URL` is
+  set, a TCP connect to Redis; it returns 503 when the database is down.
+- `src/index.ts` connects the database before it starts listening and reverses
+  the order on shutdown (drain in-flight requests → close the pool → exit) for
+  `SIGTERM`/`SIGINT`.
+
+## Database (PostgreSQL + Prisma)
+
+- Local/CI databases are provisioned with Docker Compose (`docker-compose.yml`):
+  `postgres` on 5432 with a named volume and a health check, plus an isolated
+  `postgres-test` instance on 5433 for CI.
+- The schema lives in `prisma/schema.prisma`. Change a model, then create a
+  migration:
+  ```bash
+  npx prisma migrate dev --name describe_the_change
+  ```
+- Prefer `npx prisma migrate deploy` in CI and for fresh environments.
+- The Prisma client is a singleton in `src/services/prisma.service.ts` with a
+  bounded pool (`connection_limit`). Runtime access to the client happens only
+  through that module.
+- Auth tables (`User`, `RefreshToken`, `EmailVerification`, `PasswordReset`)
+  use hard deletes — removing a user cascades to tokens.
+
+## Health and lifecycle
+
+- `/health/live` is a plain liveness probe (always 200).
+- `/health/ready` checks the database (`SELECT 1`) and, when `REDIS_URL` is
+  set, a TCP connect to Redis; it returns 503 when the database is down.
+- `src/index.ts` connects the database before it starts listening and reverses
+  the order on shutdown (drain in-flight requests → close the pool → exit) for
+  `SIGTERM`/`SIGINT`.
 
 ## Project structure
 
