@@ -102,6 +102,14 @@ export async function revokeRefreshToken(tokenId: string): Promise<void> {
   });
 }
 
+/** Revoke a raw refresh token only if it belongs to `userId`; no-op otherwise. */
+export async function revokeRefreshTokenByValue(userId: string, rawToken: string): Promise<void> {
+  await prisma.refreshToken.updateMany({
+    where: { token: hashToken(rawToken), userId, revokedAt: null },
+    data: { revokedAt: new Date() },
+  });
+}
+
 export async function revokeAllUserTokens(userId: string): Promise<void> {
   await prisma.refreshToken.updateMany({
     where: { userId, revokedAt: null },

@@ -9,11 +9,20 @@
 
 import type { Response } from 'express';
 
-import { catchAsync, getValidated } from '@/middlewares';
-import { loginUser, refreshSession, registerUser, type PublicUser } from '@/services';
+import { catchAsync, getAuthUser, getValidated } from '@/middlewares';
+import {
+  getCurrentUser,
+  loginUser,
+  logoutAllSessions,
+  logoutSession,
+  refreshSession,
+  registerUser,
+  type CurrentUserProfile,
+  type PublicUser,
+} from '@/services';
 import type { TokenPair } from '@/services';
 import type { ApiResponse } from '@/types';
-import type { LoginSchema, RefreshSchema, RegisterSchema } from '@/validators';
+import type { LoginSchema, LogoutSchema, RefreshSchema, RegisterSchema } from '@/validators';
 
 type RegisterInput = RegisterSchema;
 type LoginInput = LoginSchema;
@@ -49,4 +58,26 @@ export const refresh = catchAsync(async (req, res: Response<ApiResponse<SessionR
   const { body } = getValidated<RefreshInput, unknown, unknown>(req);
   const result = await refreshSession(body.refreshToken);
   res.status(200).json({ success: true, data: result });
+});
+
+/** GET /api/v1/auth/me */
+export const me = catchAsync(async (req, res: Response<ApiResponse<CurrentUserProfile>>) => {
+  const { sub } = getAuthUser(req);
+  const profile = await getCurrentUser(sub);
+  res.status(200).json({ success: true, data: profile });
+});
+
+/** POST /api/v1/auth/logout */
+export const logout = catchAsync(async (req, res: Response) => {
+  const { sub } = getAuthUser(req);
+  const { body } = getValidated<LogoutSchema, unknown, unknown>(req);
+  await logoutSession(sub, body.refreshToken);
+  res.status(204).end();
+});
+
+/** POST /api/v1/auth/logout-all */
+export const logoutAll = catchAsync(async (req, res: Response) => {
+  const { sub } = getAuthUser(req);
+  await logoutAllSessions(sub);
+  res.status(204).end();
 });
