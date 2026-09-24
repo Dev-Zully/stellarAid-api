@@ -9,13 +9,15 @@
 
 import type { Response } from 'express';
 
-import { catchAsync, getValidated } from '@/middlewares';
+import { catchAsync, getAuthUser, getValidated } from '@/middlewares';
 import {
+  getCurrentUser,
   loginUser,
+  logoutAllSessions,
+  logoutSession,
   refreshSession,
   registerUser,
-  requestPasswordReset,
-  resetPassword,
+  type CurrentUserProfile,
   type PublicUser,
 } from '@/services';
 import type { TokenPair } from '@/services';
@@ -26,6 +28,7 @@ import type {
   RefreshSchema,
   RegisterSchema,
   ResetPasswordSchema,
+    LogoutSchema
 } from '@/validators';
 
 type RegisterInput = RegisterSchema;
@@ -80,4 +83,24 @@ export const reset = catchAsync(async (req, res: Response<ApiResponse<{ message:
   const { body } = getValidated<ResetPasswordInput, unknown, unknown>(req);
   const result = await resetPassword(body.token, body.password);
   res.status(200).json({ success: true, data: result });
+/** GET /api/v1/auth/me */
+export const me = catchAsync(async (req, res: Response<ApiResponse<CurrentUserProfile>>) => {
+  const { sub } = getAuthUser(req);
+  const profile = await getCurrentUser(sub);
+  res.status(200).json({ success: true, data: profile });
+});
+
+/** POST /api/v1/auth/logout */
+export const logout = catchAsync(async (req, res: Response) => {
+  const { sub } = getAuthUser(req);
+  const { body } = getValidated<LogoutSchema, unknown, unknown>(req);
+  await logoutSession(sub, body.refreshToken);
+  res.status(204).end();
+});
+
+/** POST /api/v1/auth/logout-all */
+export const logoutAll = catchAsync(async (req, res: Response) => {
+  const { sub } = getAuthUser(req);
+  await logoutAllSessions(sub);
+  res.status(204).end();
 });
