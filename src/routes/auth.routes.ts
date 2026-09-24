@@ -172,14 +172,41 @@
  *       204:
  *         description: All sessions revoked
  *       401:
- *         $ref: '#/components/responses/Unauthorized'
- *       429:
- *         $ref: '#/components/responses/RateLimited'
+ *         description: Expired or revoked token
+ * /api/v1/auth/forgot-password:
+ *   post:
+ *     summary: Request a password reset
+ *     description: Generates a one-hour reset token and sends a reset link.
+ *       The response is identical whether the email exists.
+ *     tags: [Auth]
+ *     responses:
+ *       200:
+ *         description: Generic password reset response
+ *       422:
+ *         description: Validation failed
+ * /api/v1/auth/reset-password:
+ *   post:
+ *     summary: Reset a password
+ *     description: Consumes a one-time reset token and revokes all sessions.
+ *     tags: [Auth]
+ *     responses:
+ *       200:
+ *         description: Password reset
+ *       400:
+ *         description: Invalid or expired token
+ *       422:
+ *         description: Validation failed
  */
 
-import { login, logout, logoutAll, me, refresh, register } from '@/controllers';
-import { authenticate, validate } from '@/middlewares';
-import { loginSchema, logoutSchema, refreshSchema, registerSchema } from '@/validators';
+import { forgotPassword, login, refresh, register, reset } from '@/controllers';
+import { passwordResetLimiter, validate } from '@/middlewares';
+import {
+	forgotPasswordSchema,
+	loginSchema,
+	refreshSchema,
+	registerSchema,
+	resetPasswordSchema,
+} from '@/validators';
 
 import { createFeatureRouter } from './router-factory';
 
@@ -188,6 +215,18 @@ export const authRouter = createFeatureRouter('auth');
 authRouter.post('/register', validate({ body: registerSchema }), register);
 authRouter.post('/login', validate({ body: loginSchema }), login);
 authRouter.post('/refresh', validate({ body: refreshSchema }), refresh);
+authRouter.post(
+  '/forgot-password',
+  passwordResetLimiter,
+  validate({ body: forgotPasswordSchema }),
+  forgotPassword,
+);
+authRouter.post(
+  '/reset-password',
+  passwordResetLimiter,
+  validate({ body: resetPasswordSchema }),
+  reset,
+);
 authRouter.get('/me', authenticate, me);
 authRouter.post('/logout', authenticate, validate({ body: logoutSchema }), logout);
 authRouter.post('/logout-all', authenticate, logoutAll);

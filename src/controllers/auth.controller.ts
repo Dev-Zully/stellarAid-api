@@ -22,11 +22,20 @@ import {
 } from '@/services';
 import type { TokenPair } from '@/services';
 import type { ApiResponse } from '@/types';
-import type { LoginSchema, LogoutSchema, RefreshSchema, RegisterSchema } from '@/validators';
+import type {
+  ForgotPasswordSchema,
+  LoginSchema,
+  RefreshSchema,
+  RegisterSchema,
+  ResetPasswordSchema,
+    LogoutSchema
+} from '@/validators';
 
 type RegisterInput = RegisterSchema;
 type LoginInput = LoginSchema;
 type RefreshInput = RefreshSchema;
+type ForgotPasswordInput = ForgotPasswordSchema;
+type ResetPasswordInput = ResetPasswordSchema;
 
 interface RegisterResult {
   user: PublicUser;
@@ -60,6 +69,20 @@ export const refresh = catchAsync(async (req, res: Response<ApiResponse<SessionR
   res.status(200).json({ success: true, data: result });
 });
 
+/** POST /api/v1/auth/forgot-password */
+export const forgotPassword = catchAsync(
+  async (req, res: Response<ApiResponse<{ message: string }>>) => {
+    const { body } = getValidated<ForgotPasswordInput, unknown, unknown>(req);
+    const result = await requestPasswordReset(body.email);
+    res.status(200).json({ success: true, data: result });
+  },
+);
+
+/** POST /api/v1/auth/reset-password */
+export const reset = catchAsync(async (req, res: Response<ApiResponse<{ message: string }>>) => {
+  const { body } = getValidated<ResetPasswordInput, unknown, unknown>(req);
+  const result = await resetPassword(body.token, body.password);
+  res.status(200).json({ success: true, data: result });
 /** GET /api/v1/auth/me */
 export const me = catchAsync(async (req, res: Response<ApiResponse<CurrentUserProfile>>) => {
   const { sub } = getAuthUser(req);
