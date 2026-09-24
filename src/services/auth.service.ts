@@ -10,7 +10,7 @@ import { randomBytes } from 'node:crypto';
 import { AppError } from '@/middlewares';
 import { prisma } from '@/services';
 import { comparePassword, hashPassword } from '@/utils';
-import type { ArtistProfile, Role, User } from '@prisma/client';
+import type { ArtistProfile, Prisma, Role, User } from '@prisma/client';
 
 import {
   issueTokenPair,
@@ -28,7 +28,12 @@ export type PublicUser = {
   readonly email: string;
   readonly role: Role;
   readonly emailVerified: boolean;
+  readonly bio: string | null;
+  readonly location: string | null;
+  readonly website: string | null;
+  readonly socialLinks: Prisma.JsonValue | null;
   readonly createdAt: Date;
+  readonly updatedAt: Date;
 };
 
 export interface RegisterInput {
@@ -53,7 +58,12 @@ export function toPublicUser(user: User): PublicUser {
     email: user.email,
     role: user.role,
     emailVerified: user.emailVerified,
+    bio: user.bio,
+    location: user.location,
+    website: user.website,
+    socialLinks: user.socialLinks,
     createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
   };
 }
 

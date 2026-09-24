@@ -10,6 +10,10 @@ import { join } from 'node:path';
 import swaggerJsdoc from 'swagger-jsdoc';
 import { env } from '@/config';
 
+function toGlob(path: string): string {
+  return path.replace(/\\/g, '/');
+}
+
 export const openApiSpec = swaggerJsdoc({
   definition: {
     openapi: '3.0.3',
@@ -21,12 +25,239 @@ export const openApiSpec = swaggerJsdoc({
         'authentication uses a Bearer access token with refresh-token rotation.',
       contact: { name: 'Lumora Services' },
     },
-    servers: [{ url: '/api/v1', description: `Current API version (${env.nodeEnv})` }],
+    // Paths in route annotations are absolute (e.g. `/api/v1/auth/login`), so
+    // the server root is `/` — otherwise "Try it out" would double the prefix.
+    servers: [{ url: '/', description: `This server (${env.nodeEnv})` }],
+    tags: [
+      { name: 'Auth', description: 'Registration, login, sessions and the current user.' },
+      { name: 'Users', description: 'User profile management.' },
+    ],
     components: {
       securitySchemes: {
-        BearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+        BearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          description: 'Access token from `/api/v1/auth/login` or `/api/v1/auth/register`.',
+        },
+      },
+      responses: {
+        Unauthorized: {
+          description: 'Missing, invalid or expired access token',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ErrorResponse' },
+              example: {
+                success: false,
+                error: { code: 'UNAUTHORIZED', message: 'Access token expired' },
+              },
+            },
+          },
+        },
+        ValidationFailed: {
+          description: 'Request validation failed',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ValidationError' },
+              example: {
+                success: false,
+                error: {
+                  code: 'VALIDATION_ERROR',
+                  message: 'Request validation failed.',
+                  fields: [
+                    {
+                      path: 'body.email',
+                      message: 'Must be a valid email address.',
+                      code: 'invalid_format',
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        },
+        RateLimited: {
+          description: 'Too many requests (auth routes: 10/min per IP)',
+          headers: {
+            'Retry-After': {
+              description: 'Seconds to wait before retrying.',
+              schema: { type: 'integer', example: 60 },
+            },
+          },
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ErrorResponse' },
+              example: {
+                success: false,
+                error: {
+                  code: 'RATE_LIMITED',
+                  message: 'Too many authentication attempts. Please try again later.',
+                },
+              },
+            },
+          },
+        },
       },
       schemas: {
+        PublicUser: {
+          type: 'object',
+          required: ['id', 'name', 'username', 'email', 'role', 'emailVerified'],
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            name: { type: 'string', example: 'Ada Lovelace' },
+            username: { type: 'string', example: 'ada_1a2b3c' },
+            email: { type: 'string', format: 'email', example: 'ada@example.com' },
+            role: { type: 'string', enum: ['USER', 'ARTIST', 'ADMIN'] },
+            emailVerified: { type: 'boolean' },
+            bio: { type: 'string', nullable: true },
+            location: { type: 'string', nullable: true },
+            website: { type: 'string', format: 'uri', nullable: true },
+            socialLinks: {
+              type: 'object',
+              nullable: true,
+              additionalProperties: { type: 'string', format: 'uri' },
+              example: { twitter: 'https://twitter.com/ada' },
+            },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+          },
+        },
+        PublicUserResponse: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean', enum: [true] },
+            data: { $ref: '#/components/schemas/PublicUser' },
+          },
+        },
+        TokenPair: {
+          type: 'object',
+          required: ['accessToken', 'accessTokenExpiresIn', 'refreshToken', 'refreshTokenId'],
+          properties: {
+            accessToken: { type: 'string', description: 'JWT; send as `Bearer <token>`.' },
+            accessTokenExpiresIn: { type: 'string', example: '15m' },
+            refreshToken: { type: 'string', description: 'Opaque, single-use refresh token.' },
+            refreshTokenId: { type: 'string', format: 'uuid' },
+            refreshTokenExpiresAt: { type: 'string', format: 'date-time' },
+          },
+        },
+        SessionResponse: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean', enum: [true] },
+            data: {
+              type: 'object',
+              properties: {
+                user: { $ref: '#/components/schemas/PublicUser' },
+                tokens: { $ref: '#/components/schemas/TokenPair' },
+              },
+            },
+          },
+        },
+        Wallet: {
+          type: 'object',
+          properties: {
+            publicKey: {
+              type: 'string',
+              example: 'GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H',
+            },
+            network: { type: 'string', example: 'testnet' },
+            verified: { type: 'boolean' },
+            createdAt: { type: 'string', format: 'date-time' },
+          },
+        },
+        ArtistProfile: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            bio: { type: 'string', nullable: true },
+            location: { type: 'string', nullable: true },
+            hourlyRate: { type: 'string', nullable: true, example: '45.00' },
+            availability: { type: 'boolean' },
+            skills: { nullable: true },
+            socialLinks: { nullable: true },
+            coverImage: { type: 'string', nullable: true },
+            avatarUrl: { type: 'string', nullable: true },
+            verified: { type: 'boolean' },
+            verificationStatus: { type: 'string', example: 'PENDING' },
+            createdAt: { type: 'string', format: 'date-time' },
+            updatedAt: { type: 'string', format: 'date-time' },
+          },
+        },
+        CurrentUser: {
+          allOf: [
+            { $ref: '#/components/schemas/PublicUser' },
+            {
+              type: 'object',
+              properties: {
+                wallets: { type: 'array', items: { $ref: '#/components/schemas/Wallet' } },
+                artistProfile: {
+                  allOf: [{ $ref: '#/components/schemas/ArtistProfile' }],
+                  nullable: true,
+                },
+              },
+            },
+          ],
+        },
+        RegisterRequest: {
+          type: 'object',
+          required: ['name', 'email', 'password'],
+          properties: {
+            name: { type: 'string', maxLength: 120, example: 'Ada Lovelace' },
+            email: { type: 'string', format: 'email', example: 'ada@example.com' },
+            password: {
+              type: 'string',
+              minLength: 8,
+              maxLength: 128,
+              description: 'Must contain a lowercase and an uppercase letter.',
+              example: 'Password123',
+            },
+            role: { type: 'string', enum: ['USER', 'ARTIST'], default: 'USER' },
+          },
+        },
+        LoginRequest: {
+          type: 'object',
+          required: ['email', 'password'],
+          properties: {
+            email: { type: 'string', format: 'email', example: 'ada@example.com' },
+            password: { type: 'string', example: 'Password123' },
+          },
+        },
+        RefreshTokenRequest: {
+          type: 'object',
+          required: ['refreshToken'],
+          properties: {
+            refreshToken: { type: 'string', description: 'Refresh token from a TokenPair.' },
+          },
+        },
+        UpdateProfileRequest: {
+          type: 'object',
+          minProperties: 1,
+          additionalProperties: false,
+          properties: {
+            name: { type: 'string', maxLength: 120, example: 'Ada L.' },
+            username: {
+              type: 'string',
+              minLength: 3,
+              maxLength: 30,
+              pattern: '^[a-z0-9_]+$',
+              example: 'ada_lovelace',
+            },
+            bio: { type: 'string', maxLength: 1000, nullable: true, example: 'Mathematician.' },
+            location: { type: 'string', maxLength: 120, nullable: true, example: 'London' },
+            website: {
+              type: 'string',
+              format: 'uri',
+              nullable: true,
+              example: 'https://ada.dev',
+            },
+            socialLinks: {
+              type: 'object',
+              nullable: true,
+              additionalProperties: { type: 'string', format: 'uri' },
+              example: { github: 'https://github.com/ada' },
+            },
+          },
+        },
         Health: {
           type: 'object',
           required: ['status', 'uptime', 'timestamp'],
@@ -82,5 +313,10 @@ export const openApiSpec = swaggerJsdoc({
       },
     },
   },
-  apis: [join(__dirname, 'routes/**/*.routes.ts'), join(__dirname, 'routes/**/*.routes.js')],
+  // Globs need forward slashes; `join` yields backslashes on Windows, which
+  // silently matches nothing and leaves the spec without any paths.
+  apis: [
+    toGlob(join(__dirname, 'routes/**/*.routes.ts')),
+    toGlob(join(__dirname, 'routes/**/*.routes.js')),
+  ],
 });
