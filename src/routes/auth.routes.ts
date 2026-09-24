@@ -12,6 +12,12 @@
  *     description: Creates a user (with a pending email verification record)
  *       and returns an access/refresh token pair plus the verification token.
  *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/RegisterRequest'
  *     responses:
  *       201:
  *         description: User created
@@ -32,44 +38,81 @@
  *                     verificationToken:
  *                       type: string
  *       409:
- *         description: Email already in use
+ *         description: Email already registered
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             example:
+ *               success: false
+ *               error: { code: CONFLICT, message: Email already registered }
  *       422:
- *         description: Validation failed
+ *         $ref: '#/components/responses/ValidationFailed'
+ *       429:
+ *         $ref: '#/components/responses/RateLimited'
  * /api/v1/auth/login:
  *   post:
  *     summary: Log in
  *     description: Exchanges valid credentials for a fresh token pair.
  *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/LoginRequest'
  *     responses:
  *       200:
  *         description: Authenticated
  *         content:
  *           application/json:
  *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 data:
- *                   type: object
- *                   properties:
- *                     user:
- *                       $ref: '#/components/schemas/PublicUser'
- *                     tokens:
- *                       $ref: '#/components/schemas/TokenPair'
+ *               $ref: '#/components/schemas/SessionResponse'
  *       401:
  *         description: Invalid credentials
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             example:
+ *               success: false
+ *               error: { code: UNAUTHORIZED, message: Invalid email or password }
+ *       422:
+ *         $ref: '#/components/responses/ValidationFailed'
+ *       429:
+ *         $ref: '#/components/responses/RateLimited'
  * /api/v1/auth/refresh:
  *   post:
  *     summary: Rotate a refresh token
  *     description: Revokes the presented refresh token and issues a new
  *       access/refresh pair (single-use rotation).
  *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/RefreshTokenRequest'
  *     responses:
  *       200:
  *         description: New token pair issued
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SessionResponse'
  *       401:
- *         description: Expired or revoked token
+ *         description: Expired, revoked or unknown refresh token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             example:
+ *               success: false
+ *               error: { code: UNAUTHORIZED, message: Invalid or expired refresh token }
+ *       422:
+ *         $ref: '#/components/responses/ValidationFailed'
+ *       429:
+ *         $ref: '#/components/responses/RateLimited'
  * /api/v1/auth/me:
  *   get:
  *     summary: Current user profile
@@ -82,8 +125,19 @@
  *     responses:
  *       200:
  *         description: Current user
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   $ref: '#/components/schemas/CurrentUser'
  *       401:
- *         description: Missing, invalid or expired access token
+ *         $ref: '#/components/responses/Unauthorized'
+ *       429:
+ *         $ref: '#/components/responses/RateLimited'
  * /api/v1/auth/logout:
  *   post:
  *     summary: Log out the current session
@@ -97,16 +151,16 @@
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required: [refreshToken]
- *             properties:
- *               refreshToken:
- *                 type: string
+ *             $ref: '#/components/schemas/RefreshTokenRequest'
  *     responses:
  *       204:
  *         description: Logged out
  *       401:
- *         description: Missing, invalid or expired access token
+ *         $ref: '#/components/responses/Unauthorized'
+ *       422:
+ *         $ref: '#/components/responses/ValidationFailed'
+ *       429:
+ *         $ref: '#/components/responses/RateLimited'
  * /api/v1/auth/logout-all:
  *   post:
  *     summary: Log out of all sessions
@@ -118,7 +172,9 @@
  *       204:
  *         description: All sessions revoked
  *       401:
- *         description: Missing, invalid or expired access token
+ *         $ref: '#/components/responses/Unauthorized'
+ *       429:
+ *         $ref: '#/components/responses/RateLimited'
  */
 
 import { login, logout, logoutAll, me, refresh, register } from '@/controllers';

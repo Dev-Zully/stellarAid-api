@@ -92,6 +92,10 @@ model User {
   username      String   @unique
   role          Role     @default(USER)
   emailVerified Boolean  @default(false)
+  bio           String?
+  location      String?
+  website       String?
+  socialLinks   Json?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
