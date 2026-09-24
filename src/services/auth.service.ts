@@ -42,6 +42,9 @@ export interface LoginInput {
 }
 
 const EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
+const PASSWORD_RESET_TTL_MS = 60 * 60 * 1000;
+const PASSWORD_RESET_MESSAGE =
+  'If an account exists for that email, a password reset link has been sent.';
 
 export function toPublicUser(user: User): PublicUser {
   return {
@@ -131,4 +134,41 @@ export async function refreshSession(rawToken: string): Promise<{
   await revokeRefreshToken(refreshTokenId);
   const tokens = await issueTokenPair({ id: user.id, role: user.role });
   return { user: toPublicUser(user), tokens };
+}
+
+export async function requestPasswordReset(email: string): Promise<{ message: string }> {
+  const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+  if (user !== null) {
+    const token = randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + PASSWORD_RESET_TTL_MS);
+    await prisma.$transaction([
+      prisma.passwordReset.updateMany({
+        where: { userId: user.id, consumed: false },
+        data: { consumed: true },
+      }),
+      prisma.passwordReset.create({ data: { userId: user.id, token, expiresAt } }),
+    ]);
+  }
+  return { message: PASSWORD_RESET_MESSAGE };
+}
+
+export async function resetPassword(token: string, password: string): Promise<{ message: string }> {
+  const reset = await prisma.passwordReset.findUnique({ where: { token } });
+  if (reset === null || reset.consumed || reset.expiresAt <= new Date()) {
+    throw new AppError(
+      'BAD_REQUEST',
+      'Password reset token is invalid or expired. Request a new password reset token.',
+    );
+  }
+
+  const passwordHash = await hashPassword(password);
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: reset.userId }, data: { passwordHash } }),
+    prisma.passwordReset.update({ where: { id: reset.id }, data: { consumed: true } }),
+    prisma.refreshToken.updateMany({
+      where: { userId: reset.userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    }),
+  ]);
+  return { message: 'Password reset successfully. Please log in again.' };
 }
