@@ -26,6 +26,10 @@ export const refreshSchema = z.object({
   refreshToken: z.string().trim().min(1, 'refreshToken is required.'),
 });
 
+export const logoutSchema = z.object({
+  refreshToken: z.string().trim().min(1, 'refreshToken is required.'),
+});
+
 export const verifyEmailSchema = z.object({
   token: z.string().trim().min(1, 'token is required.'),
 });
@@ -33,4 +37,5 @@ export const verifyEmailSchema = z.object({
 export type RegisterSchema = z.infer<typeof registerSchema>;
 export type LoginSchema = z.infer<typeof loginSchema>;
 export type RefreshSchema = z.infer<typeof refreshSchema>;
+export type LogoutSchema = z.infer<typeof logoutSchema>;
 export type VerifyEmailSchema = z.infer<typeof verifyEmailSchema>;

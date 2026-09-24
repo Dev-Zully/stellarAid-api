@@ -10,11 +10,13 @@ import { randomBytes } from 'node:crypto';
 import { AppError } from '@/middlewares';
 import { prisma } from '@/services';
 import { comparePassword, hashPassword } from '@/utils';
-import type { Role, User } from '@prisma/client';
+import type { ArtistProfile, Role, User } from '@prisma/client';
 
 import {
   issueTokenPair,
+  revokeAllUserTokens,
   revokeRefreshToken,
+  revokeRefreshTokenByValue,
   verifyRefreshToken,
   type TokenPair,
 } from './token.service';
@@ -117,6 +119,55 @@ export async function loginUser(
   }
   const tokens = await issueTokenPair({ id: user.id, role: user.role });
   return { user: toPublicUser(user), tokens };
+}
+
+export interface PublicWallet {
+  readonly publicKey: string;
+  readonly network: string;
+  readonly verified: boolean;
+  readonly createdAt: Date;
+}
+
+export type PublicArtistProfile = Omit<ArtistProfile, 'userId'>;
+
+export interface CurrentUserProfile extends PublicUser {
+  readonly wallets: PublicWallet[];
+  readonly artistProfile: PublicArtistProfile | null;
+}
+
+/** Profile for GET /auth/me — never includes the password hash or token data. */
+export async function getCurrentUser(userId: string): Promise<CurrentUserProfile> {
+  const [user, wallets, artistProfile] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId } }),
+    prisma.wallet.findMany({
+      where: { userId },
+      select: { publicKey: true, network: true, verified: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    }),
+    prisma.artistProfile.findUnique({ where: { userId } }),
+  ]);
+  if (user === null) {
+    throw new AppError('UNAUTHORIZED', 'User no longer exists');
+  }
+  let publicArtistProfile: PublicArtistProfile | null = null;
+  if (artistProfile !== null) {
+    const { userId: _userId, ...rest } = artistProfile;
+    publicArtistProfile = rest;
+  }
+  return { ...toPublicUser(user), wallets, artistProfile: publicArtistProfile };
+}
+
+/**
+ * Revoke a single refresh token owned by `userId`. Idempotent: unknown,
+ * foreign or already-revoked tokens are silently ignored.
+ */
+export async function logoutSession(userId: string, rawToken: string): Promise<void> {
+  await revokeRefreshTokenByValue(userId, rawToken);
+}
+
+/** Revoke every active refresh token for the user (all sessions). */
+export async function logoutAllSessions(userId: string): Promise<void> {
+  await revokeAllUserTokens(userId);
 }
 
 export async function refreshSession(rawToken: string): Promise<{
