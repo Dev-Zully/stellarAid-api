@@ -154,7 +154,7 @@ export async function requestPasswordReset(email: string): Promise<{ message: st
 
 export async function resetPassword(token: string, password: string): Promise<{ message: string }> {
   const reset = await prisma.passwordReset.findUnique({ where: { token } });
-  if (reset === null || reset.consumed || reset.expiresAt <= new Date()) {
+  if (reset === null) {
     throw new AppError(
       'BAD_REQUEST',
       'Password reset token is invalid or expired. Request a new password reset token.',
@@ -162,13 +162,23 @@ export async function resetPassword(token: string, password: string): Promise<{ 
   }
 
   const passwordHash = await hashPassword(password);
-  await prisma.$transaction([
-    prisma.user.update({ where: { id: reset.userId }, data: { passwordHash } }),
-    prisma.passwordReset.update({ where: { id: reset.id }, data: { consumed: true } }),
-    prisma.refreshToken.updateMany({
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    const claimed = await tx.passwordReset.updateMany({
+      where: { id: reset.id, consumed: false, expiresAt: { gt: now } },
+      data: { consumed: true },
+    });
+    if (claimed.count !== 1) {
+      throw new AppError(
+        'BAD_REQUEST',
+        'Password reset token is invalid or expired. Request a new password reset token.',
+      );
+    }
+    await tx.user.update({ where: { id: reset.userId }, data: { passwordHash } });
+    await tx.refreshToken.updateMany({
       where: { userId: reset.userId, revokedAt: null },
-      data: { revokedAt: new Date() },
-    }),
-  ]);
+      data: { revokedAt: now },
+    });
+  });
   return { message: 'Password reset successfully. Please log in again.' };
 }
